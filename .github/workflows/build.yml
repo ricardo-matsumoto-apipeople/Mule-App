@@ -27,8 +27,8 @@ jobs:
           servers: |
             [{
              "id": "MuleRepository",
-             "username": "${{ MULE_KPMG_NEXUS_USERNAME }}",
-             "password": "${{ MULE_KPMG_NEXUS_PASSWORD }}"
+             "username": "${{ secrets.MULE_KPMG_NEXUS_USERNAME }}",
+             "password": "${{ secrets.MULE_KPMG_NEXUS_PASSWORD }}"
             }]
       
       - name: Add exchange v2 repo credentials
