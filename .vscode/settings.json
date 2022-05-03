@@ -1,0 +1,6 @@
+{
+    "yaml.schemas": {
+        "file:///c%3A/Users/ricam/.vscode/extensions/atlassian.atlascode-2.10.12/resources/schemas/pipelines-schema.json": "bitbucket-pipelines.yml",
+        "https://json.schemastore.org/hammerkit.json": "file:///c%3A/Users/ricam/Desktop/Mulesoft-wsn-ew/commonmodulelab_local/.github/workflows/build.yml"
+    }
+}
