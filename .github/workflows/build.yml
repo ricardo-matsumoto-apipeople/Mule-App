@@ -1,5 +1,5 @@
 # This workflow will build a MuleSoft project
-name: Build and Deploy to Sandbox
+name: Build Mule App
 on: [push, pull_request]
     
 jobs:
@@ -20,7 +20,37 @@ jobs:
         uses: actions/setup-java@v1
         with:
           java-version: 1.8
+
+      - name: Add nexus repo credentials
+        uses: s4u/maven-settings-action@v2.4.0
+        with:
+          servers: |
+            [{
+             "id": "MuleRepository",
+             "username": "${{ MULE_KPMG_NEXUS_USERNAME }}",
+             "password": "${{ MULE_KPMG_NEXUS_PASSWORD }}"
+            }]
       
+      - name: Add exchange v2 repo credentials
+        uses: s4u/maven-settings-action@v2.4.0
+        with:
+          servers: |
+            [{
+             "id": "anypoint-exchange-v2",
+             "username": "${{ secrets.MULE_EXCHANGE_USERNAME }}",
+             "password": "${{ secrets.MULE_EXCHANGE_PASSWORD }}"
+            }]
+      
+      - name: Add exchange v3 repo credentials
+        uses: s4u/maven-settings-action@v2.4.0
+        with:
+          servers: |
+            [{
+             "id": "anypoint-exchange-v3",
+             "username": "${{ secrets.MULE_EXCHANGE_USERNAME }}",
+             "password": "${{ secrets.MULE_EXCHANGE_PASSWORD }}"
+            }]
+
       - name: Build with Maven
         run: mvn -B package --file pom.xml
       
