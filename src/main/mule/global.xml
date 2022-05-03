@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp" xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd">
+	<json-logger:config name="JSON_Logger_Config" doc:name="JSON Logger Config" doc:id="79a052bd-8e52-4dae-829f-15ade1eb2809" environment="${env}" applicationName="${api.name}" applicationVersion="${api.version}"/>
+	<vm:config name="VM_Config" doc:name="VM Config" doc:id="48ff6f21-8742-4fd7-99bf-83b709973ac6" >
+		<vm:queues >
+			<vm:queue queueName="${vm.request.queue}" />
+			<vm:queue queueName="${vm.response.queue}" />
+		</vm:queues>
+	</vm:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="69db7b9f-5569-4f3c-8261-fb280f412240" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="03dc946c-1362-4a3b-a103-3d439c2dc04a" >
+		<file:connection workingDir="${mule.home}/apps/${app.name}/" />
+	</file:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="a416a421-87a1-4df9-bc92-a2375754bdf8" file="config.yaml" />
+	<anypoint-mq:config name="Anypoint_MQ_Config" doc:name="Anypoint MQ Config" doc:id="d712197c-aa4d-4171-a81e-8ff2a221dbbf" >
+		<anypoint-mq:connection clientId="3310e3efc5274a4dab03e95a877f4021" clientSecret="74E8119522dd4F45836E15A717a9f4dC" />
+	</anypoint-mq:config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="f060a90f-f63c-4355-a752-77fb31b47e48" >
+		<http:request-connection host="gogle.com" />
+	</http:request-config>
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config" doc:id="86c2d5a9-5f60-4fea-9c4b-c25abcb8901e" >
+		<sftp:connection host="test.rebex.net" username="demo" password="password" />
+	</sftp:config>
+</mule>

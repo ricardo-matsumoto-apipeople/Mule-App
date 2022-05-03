@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger" 
+	  xmlns:vm="http://www.mulesoft.org/schema/mule/vm" 
+	  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http" 
+	  xmlns="http://www.mulesoft.org/schema/mule/core" 
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	  xsi:schemaLocation="http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd">
+	<flow name="cf-http-retrieve-all-paged-records" doc:id="8567f0f6-49f9-4f28-a7c3-e6ee6873a023">
+		<vm:listener doc:name="Listener Request Queue" doc:id="82c070f6-a6a1-4a4e-bd8b-77424c4f5929" config-ref="VM_Config" queueName="${vm.request.queue}" timeoutUnit="MINUTES"/>
+		<json-logger:logger doc:name="DEBUG: Request Queue message" doc:id="be3e1d70-be03-458f-a908-ea66187d821f" config-ref="JSON_Logger_Config"
+			message="Request Queue message : " tracePoint="FLOW" category="${api.name}.cf-http-retrieve-all-paged-records" priority="DEBUG" correlationId="#[vars.transactionId]"/>
+		<set-variable value="#[payload]" variableName="originalPayload" doc:name="FV: Set originalPayload" doc:id="03084a0d-0fd9-4f07-86f1-5d9dea87365d" />
+		<flow-ref name="#[vars.originalPayload.metadata.callbackFlow]" doc:name="Flow Reference to callbackFlow var" doc:id="07d85f49-6220-4eef-bd83-b546683e45f6"  />
+		<choice doc:name="Check moreRecords?" doc:id="4184e7e0-0b4a-4e08-b79b-9b8659660085">
+			<when expression="#[vars.moreRecords == false]">
+			<json-logger:logger doc:name="INFO: Publish message to VM Target Queue" doc:id="08e04bb1-ab57-442f-be59-e3a02551bd9d" config-ref="JSON_Logger_Config"
+				message='#["No more records to call, Publish message to " ++ payload.metadata.outputQueue]' tracePoint="FLOW" correlationId="#[vars.transactionId]"
+				category="${api.name}.cf-http-retrieve-all-paged-records">
+				<json-logger:content><![CDATA[#[{}]]]></json-logger:content>
+			</json-logger:logger>
+			<vm:publish queueName="#[vars.originalPayload.metadata.outputQueue]" config-ref="VM_Config" sendCorrelationId="ALWAYS" correlationId="#[correlationId]"
+				doc:name="Publish to Target Queue" doc:id="97bbb36f-d201-4eb7-bfcb-f5a6ee9367de" />
+			</when>
+			<otherwise>
+				<vm:publish queueName="${vm.request.queue}" config-ref="VM_Config" sendCorrelationId="ALWAYS" correlationId="#[correlationId]" doc:name="Publish to Request Queue"
+					doc:id="576b3f84-041f-47d5-97e0-a26514979f8f" />
+			</otherwise>
+		</choice>
+	</flow>
+</mule>

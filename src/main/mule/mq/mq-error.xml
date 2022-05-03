@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:error-handler-plugin="http://www.mulesoft.org/schema/mule/error-handler-plugin"
+	xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/error-handler-plugin http://www.mulesoft.org/schema/mule/error-handler-plugin/current/mule-error-handler-plugin.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<error-handler-plugin:config name="Error_Handler_Plugin_Config" doc:name="Error Handler Plugin Config" doc:id="a541b847-a10e-499f-9e4a-1756cd062158" />
+	<error-handler name="common-mq-sub-error-handler"
+		doc:id="2421c4a6-5700-490d-9d5e-4c16bbc33489">
+		<on-error-propagate enableNotifications="true"
+			logException="true" doc:name="On Error Propagate"
+			doc:id="bc621c09-89ae-4393-9ea9-6896a2f80486" when='#[ p("error_type.propagate") contains(error.errorType.asString) ]'>
+			<ee:transform doc:name="SET var errorQueuePayload"
+				doc:id="5147a35a-9c90-47e2-a601-751e7cafd19d">
+				<ee:message>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable
+						resource="dataweave/p2p-common/vErrorQueuePayload.dwl"
+						variableName="errorQueuePayload" />
+				</ee:variables>
+			</ee:transform>
+			<error-handler-plugin:on-error
+				doc:name="Process Error"
+				doc:id="8f85662d-a4f4-47f4-971e-3026043793ef"
+				config-ref="Error_Handler_Plugin_Config"
+				correlationId="#[vars.transactionId]">
+				<error-handler-plugin:custom-errors><![CDATA[#[${file::dataweave/customErrors.dwl}]]]></error-handler-plugin:custom-errors>
+			</error-handler-plugin:on-error>
+			<json-logger:logger
+				doc:name="ERROR: Retriable Error"
+				doc:id="2d8030e1-bdb8-444f-8242-a613ae5cc6be"
+				config-ref="JSON_Logger_Config"
+				message="Error processing subscriptions" tracePoint="EXCEPTION"
+				priority="ERROR" correlationId="#[vars.transactionId]"
+				category="${api.name}.common-mq-sub-error-handler">
+				<json-logger:content><![CDATA[#[import modules::JSONLoggerModule output application/json ---
+{
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem,
+	errorDescription: error.description,
+	errorType: error.errorType.asString,
+	payload: JSONLoggerModule::stringifyNonJSON(payload)
+}]]]></json-logger:content>
+			</json-logger:logger>
+			<until-successful maxRetries="${until.retry.max}"
+				doc:name="Until Successful"
+				doc:id="88adf352-82fb-4535-87d2-24b052fd7728"
+				millisBetweenRetries="${until.retry.delay}">
+				<anypoint-mq:publish
+					doc:name="Publish to Retry Queue"
+					doc:id="33a8b418-0509-4b5d-acb7-5074bbe2308e"
+					config-ref="Anypoint_MQ_Config" destination="${amq.name.retry}"
+					deliveryDelayUnit="SECONDS" deliveryDelay="#[Mule::p('amq.retry.delay') * vars.redeliveryCount]">
+					<anypoint-mq:body><![CDATA[#[vars.errorQueuePayload]]]></anypoint-mq:body>
+					<anypoint-mq:properties><![CDATA[#[output application/java
+---
+{
+	"x-object-id": vars.objectId,
+	"x-object-type": vars.objectType,
+	"x-redelivery-count": vars.redeliveryCount,
+	"x-source-system": vars.sourceSystem,
+	"x-transaction-id" : vars.transactionId
+}]]]></anypoint-mq:properties>
+				</anypoint-mq:publish>
+			</until-successful>
+			<json-logger:logger
+				doc:name="INFO: Payload successfully sent to retriable queue"
+				doc:id="e88bd6f4-7e23-4b11-bb65-1a9c6f48748c"
+				config-ref="JSON_Logger_Config" tracePoint="EXCEPTION"
+				message="Message sent successfully to retry queue"
+				category="${api.name}.common-mq-sub-error-handler">
+				<json-logger:content><![CDATA[#[import modules::JSONLoggerModule output application/json ---
+{
+	ackToken: vars.ackToken,
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem,
+	errorDescription: error.description,
+	errorType: error.errorType.asString,
+	payload: JSONLoggerModule::stringifyNonJSON(payload)
+}]]]></json-logger:content>
+			</json-logger:logger>
+			<anypoint-mq:ack
+				doc:name="Ack message from original Queue"
+				doc:id="21272600-0f07-4f95-82f7-b6543f629156"
+				config-ref="Anypoint_MQ_Config" ackToken="#[vars.ackToken]" />
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d36c8ac3-c5a1-41b8-9409-255750d7bc51" type="CB:TEST">
+			<anypoint-mq:ack doc:name="Copy_of_Ack message from original Queue" doc:id="2b5aaecf-7d98-4028-b389-e7e9a78c3aa0" config-ref="Anypoint_MQ_Config" ackToken="#[vars.ackToken]" />
+		</on-error-propagate>
+		<on-error-continue enableNotifications="true"
+			logException="true" doc:name="On Error Continue"
+			doc:id="122e1e90-6712-480a-af62-9af743812b3a" type="ANY">
+			<ee:transform doc:name="DW: SET var errorQueuePayload"
+				doc:id="c408763f-11fe-40fb-b2f3-cd360166d5bb">
+				<ee:message>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable
+						resource="dataweave/p2p-common/vErrorQueuePayload.dwl"
+						variableName="errorQueuePayload" />
+				</ee:variables>
+			</ee:transform>
+			<flow-ref doc:name="Refer to cf-global-error-publish"
+				doc:id="0fe1c972-0a10-4109-94c3-4ab4a083c707"
+				name="cf-global-error-publish" />
+			<anypoint-mq:ack
+				doc:name="Ack message from original Queue"
+				doc:id="ae954be2-48f7-4d17-8cd7-ded3c681ae7a"
+				config-ref="Anypoint_MQ_Config"
+				ackToken="#[vars.ackToken default attributes.ackToken]" />
+		</on-error-continue>
+	
+</error-handler>
+</mule>

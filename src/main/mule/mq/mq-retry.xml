@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+	xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger"
+	xmlns:anypoint-mq="http://www.mulesoft.org/schema/mule/anypoint-mq"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/anypoint-mq http://www.mulesoft.org/schema/mule/anypoint-mq/current/mule-anypoint-mq.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd">
+	<flow name="cf-mq-retry-flow"
+		doc:id="8211abc0-e551-4ce5-bc81-1559f50dd052">
+		<anypoint-mq:subscriber
+			doc:name="Fetch from retry queue"
+			doc:id="6ca155cb-1794-40a4-aded-62bb05040a98"
+			config-ref="Anypoint_MQ_Config" destination="${amq.name.retry}"
+			acknowledgementMode="MANUAL">
+			<anypoint-mq:subscriber-type>
+				<anypoint-mq:prefetch
+					maxLocalMessages="${amq.max.local.msgs}" />
+			</anypoint-mq:subscriber-type>
+		</anypoint-mq:subscriber>
+		<flow-ref doc:name="Refer to cf-mq-headers-flow" doc:id="4605aed5-82bb-4222-be55-8425775640a0" name="cf-mq-headers-flow"/>
+		<json-logger:logger doc:name="INFO: received message from retry queue" doc:id="dd1809a7-2898-4031-89f4-cd4be775cc9d" config-ref="JSON_Logger_Config" message="Received message from retry queue" correlationId="#[vars.transactionId]" category="${api.name}.cf-mq-retry-flow">
+			<json-logger:content ><![CDATA[#[output application/json ---
+{
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem
+}]]]></json-logger:content>
+		</json-logger:logger>
+		<set-variable value="#[attributes.ackToken]"
+			doc:name="FV: SET ackToken"
+			doc:id="99da920f-d26e-4155-8944-ac43f15a3ae3" variableName="ackToken" />
+		<set-variable value='#[vars.redeliveryCount + 1]' doc:name="FV: SET redeliveryCount" doc:id="ac9c33e8-56ab-48d3-b6f7-e5f2777eed0f" variableName="redeliveryCount"/>
+		<choice doc:name="CHECK redelivery count"
+			doc:id="5e9d2cf9-2bef-4b19-9672-07f41d147b4d">
+			<when expression="#[vars.redeliveryCount &gt; (Mule::p('amq.retry.max') as Number)]">
+				<json-logger:logger doc:name="INFO: max redelivery count reached" doc:id="90893232-2962-47ec-97bb-bcec4790749d" config-ref="JSON_Logger_Config" message="Max redelivery count reached sending to error exchange" tracePoint="FLOW" correlationId="#[vars.transactionId]" category="${api.name}.cf-mq-retry-flow">
+					<json-logger:content ><![CDATA[#[output application/json ---
+{
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem
+}]]]></json-logger:content>
+				</json-logger:logger>
+				<set-variable value="#[payload]" doc:name="FV: SET errorQueuePayload" doc:id="a9162663-073d-4ee9-b745-cabc95ba4b77" variableName="errorQueuePayload"/>
+				<flow-ref doc:name="Refer to cf-global-error-publish" doc:id="3709a0d1-0e98-43a8-9725-242c2aa88a92" name="cf-global-error-publish"/>
+			</when>
+			<otherwise>
+				<json-logger:logger doc:name="INFO: sending data to sourceQueue" doc:id="b57e9ef5-d909-43c7-ab3f-f4d2ece9bd62" config-ref="JSON_Logger_Config" message="Sending data to sourceQueue retry" tracePoint="FLOW" correlationId="#[vars.transactionId]" category="${api.name}.cf-mq-retry-flow">
+					<json-logger:content ><![CDATA[#[output application/json ---
+{
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem
+}]]]></json-logger:content>
+				</json-logger:logger>
+				<json-logger:logger doc:name="DEBUG: send message to sourceQueue" doc:id="24afe89b-80b8-4325-8da3-b8e6db3cfa45" config-ref="JSON_Logger_Config" message="Publish to source queue" tracePoint="BEFORE_REQUEST" priority="DEBUG" correlationId="#[vars.transactionId]" category="${api.name}.cf-mq-retry-flow">
+					<json-logger:content><![CDATA[#[output application/json ---
+{
+	payload: payload.data,
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem
+}]]]></json-logger:content>
+				</json-logger:logger>
+				<anypoint-mq:publish
+					doc:name="Publish to source queue"
+					doc:id="f43c9b6a-7a78-42ad-85d1-18bf0e5f8d62"
+					config-ref="Anypoint_MQ_Config"
+					destination="#[payload.sourceQueue]">
+					<anypoint-mq:body><![CDATA[#[payload.data]]]></anypoint-mq:body>
+					<anypoint-mq:properties><![CDATA[#[output application/java
+---
+{
+	"x-object-id": vars.objectId,
+	"x-object-type": vars.objectType,
+	"x-redelivery-count": vars.redeliveryCount,
+	"x-source-system": vars.sourceSystem,
+	"x-transaction-id" : vars.transactionId
+}]]]></anypoint-mq:properties>
+				</anypoint-mq:publish>
+				<json-logger:logger
+					doc:name="DEBUG: after publising message to sourceQueue"
+					doc:id="6231b3aa-c828-493c-8e13-8a7a739927d8"
+					config-ref="JSON_Logger_Config"
+					message='Message successfully published to source exchange' tracePoint="AFTER_REQUEST"
+					priority="DEBUG" correlationId="#[vars.transactionId]" category="${api.name}.cf-mq-retry-flow">
+					<json-logger:content ><![CDATA[#[import modules::JSONLoggerModule output application/json ---
+{
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem,
+	payload: JSONLoggerModule::stringifyNonJSON(payload)
+}]]]></json-logger:content>
+				</json-logger:logger>
+			</otherwise>
+		</choice>
+		<anypoint-mq:ack doc:name="Ack"
+			doc:id="9bd4964f-5758-4fec-9ead-bf3196002dce"
+			config-ref="Anypoint_MQ_Config" ackToken="#[vars.ackToken]" />
+		<json-logger:logger doc:name="INFO: End of retry flow successfully" doc:id="b6ba6853-4ace-499a-96aa-16e557937bd8" config-ref="JSON_Logger_Config" message="End of retry flow successfully" tracePoint="END" category="${api.name}.cf-mq-retry-flow">
+			<json-logger:content ><![CDATA[#[output application/json ---
+{
+	objectId: vars.objectId,
+	objectType: vars.objectType,
+	redeliveryCount: vars.redeliveryCount,
+	transactionId: vars.transactionId,
+	sourceSystem: vars.sourceSystem
+}]]]></json-logger:content>
+		</json-logger:logger>
+	</flow>
+</mule>

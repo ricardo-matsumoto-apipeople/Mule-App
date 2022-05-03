@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<flow name="mainFlow" doc:id="70b31cdf-3cd9-47fc-9a1d-e025f3b7f859" >
+		<http:listener doc:name="Listener" doc:id="4c489a70-43b1-4293-a2f1-aea9c021ff6d" config-ref="HTTP_Listener_config" path="/loop"/>
+		<set-variable value="#[uuid()]" doc:name="Set Variable" doc:id="3f497e56-5369-4c6e-ac27-644111dac5c0" variableName="transactionId"/>
+		<set-variable value="Lab Test" doc:name="Set Variable" doc:id="7ae06e36-4756-44cd-bcf3-85ff2dfa3c50" variableName="sourceSystem"/>
+		<ee:transform doc:name="Initial Payload" doc:id="570edae4-804b-4952-9fb7-447769f515f7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"metadata": {
+		"callbackFlow": "readMockFileSubFlow",
+		"endDate": (now() >> "UTC") as String {format: "yyyy-MM-dd'T'HH:mm:ss"},
+		"transactionId": vars.transactionId,
+		"sourceSystem": vars.sourceSystem,
+		"outputQueue": p("vm.response.queue"),
+		"limit": p("page.limit") as Number,
+		"offset": 0
+	}
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables />
+		
+</ee:transform>
+		<vm:publish queueName="${vm.request.queue}" doc:name="Publish to Request Queue" doc:id="b31cf458-4fea-4b73-9b76-38ace40c12ca" config-ref="VM_Config" sendCorrelationId="ALWAYS" correlationId="#[uuid()]" timeout="10" timeoutUnit="MINUTES"/>
+		<vm:consume doc:name="Consume Response Queue" doc:id="316b455d-b84e-4fb0-8512-8f35a77f7411" config-ref="VM_Config" queueName="${vm.response.queue}" timeout="${vm.consume.timeout}" timeoutUnit="MINUTES"/>
+		<json-logger:logger doc:name="Logger" doc:id="fcaaae7d-8fc3-4505-b6e6-19899741b810" config-ref="JSON_Logger_Config" message="Finished"/>
+	
+</flow>
+	<sub-flow name="setPaginationSubFlow" doc:id="39d8af95-9bd5-4c00-b5a6-ad150909877e" >
+		<set-variable value="#[(if(payload.offset?) (payload.metadata.limit * payload.offset) else (payload.metadata.limit * payload.metadata.offset))]" doc:name="Set Variable" doc:id="302ee9eb-e5ca-4e33-8919-79a9e98af057" variableName="initial_index" />
+		<set-variable value="#[(if(payload.offset?) (payload.metadata.limit * (payload.offset+1)) else (payload.metadata.limit * (payload.metadata.offset+1)))]" doc:name="Set Variable" doc:id="b113a2ce-8c04-4378-a8bc-6c974605643c" variableName="final_index" />
+	</sub-flow>
+	<sub-flow name="readMockFileSubFlow" doc:id="d9557c77-050e-42ca-80eb-035acf4c2931" >
+		<flow-ref doc:name="Set Pagination Variables" doc:id="d6d530f2-087c-40cd-aa85-e7db19b2ce74" name="setPaginationSubFlow" />
+		<file:read doc:name="Read JSON File" doc:id="98b2cbc3-0711-428e-874f-5fa4ad9a2c28" config-ref="File_Config" path="mock/${mock_response.color}"/>
+		<ee:transform doc:name="Extract entries" doc:id="1c67ade6-d47d-403c-a8a2-a51a2f4bbcb3">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload filter(item, index) -> ( index >= vars.initial_index and index < vars.final_index )]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value='#[(if(sizeOf(payload) &lt; vars.originalPayload.metadata.limit ) false else true )]' doc:name="Set moreRecords" doc:id="e7314275-12bc-4765-9334-9c1eaa686791" variableName="moreRecords" />
+		<ee:transform doc:name="Set new payload" doc:id="eb716bc7-11d9-46a9-a0b3-0540e562beae" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var accumulatedEntries = payload default [] ++ (vars.originalPayload.entries default [])
+var nextOffset = (if(vars.originalPayload.offset?) (vars.originalPayload.offset as Number +1) else vars.originalPayload.metadata.offset as Number + 1)
+---
+{
+	"metadata": vars.originalPayload.metadata,
+	"totalRecords": sizeOf(accumulatedEntries),
+	"moreRecords": vars.moreRecords,
+	"offset": nextOffset,
+	"links": payload.links,
+	"entries": accumulatedEntries
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</sub-flow>
+</mule>

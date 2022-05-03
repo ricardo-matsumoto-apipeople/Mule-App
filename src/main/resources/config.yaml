@@ -1,0 +1,51 @@
+amq:
+  client:
+    id: "74E8119522dd4F45836E15A717a9f4dC"
+    secret: "74E8119522dd4F45836E15A717a9f4dC"
+  max.local.msgs: "5"
+  name:
+    lab-queue: "common-lab-queue"
+    retry: "common-lab-retry-queue"
+    error-exchange: "common-lab-global-error"
+  retry:
+    max: "3"
+    delay: "90"
+  circuit-break:
+    errors:
+      - "HTTP: CONNECTIVITY"
+      - "CB:TEST"
+    number-errors: "3"
+    timeout: "15"
+
+api:
+  name: "common-module-lab"
+  version: "v1"
+  
+env: "dev"
+
+error_type:
+  propagate: 
+    - "HTTP: CONNECTIVITY"
+    - "HTTP:CONNECTIVITY"
+    - "HTTP:INTERNAL_SERVER_ERROR"
+    - "HTTP:RETRY_EXHAUSTED"
+    - "HTTP:SERVICE_UNAVAILABLE"
+    - "HTTP:TIMEOUT"
+    - "HTTP:TOO_MANY_REQUESTS"
+    - "HTTP:GATEWAY_TIMEOUT"
+
+mock_response: 
+  color: "color.json"
+  github: "github_response_example.json"
+
+page.limit: "3"
+
+until:
+  retry:
+    max: "3"
+    delay: "1000"
+
+vm:
+  request.queue: "vm.common_module.queue"    
+  response.queue: "vm.common_module_response.queue"
+  consume.timeout: "15"
